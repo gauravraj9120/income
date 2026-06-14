@@ -6,116 +6,7 @@ import { TransactionForm } from './components/TransactionForm';
 import { TransactionList } from './components/TransactionList';
 import { QuickAdd } from './components/QuickAdd';
 
-// Default categories
-const DEFAULT_CATEGORIES = {
-  income: ['Membership', 'Personal Training', 'Guest Pass', 'Cafe/Merchandise', 'Other'],
-  expense: ['Rent', 'Salaries', 'Equipment Maintenance', 'Utilities', 'Marketing', 'Cleaning Supplies', 'Other'],
-};
 
-// Seed realistic transactions
-const getInitialTransactions = (): Transaction[] => {
-  const today = new Date();
-  const getPastDateStr = (daysAgo: number) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() - daysAgo);
-    return d.toISOString().split('T')[0];
-  };
-
-  return [
-    {
-      id: 'tx-1',
-      amount: 1500,
-      type: 'income',
-      category: 'Membership',
-      date: getPastDateStr(4),
-      paymentMethod: 'UPI',
-      memberName: 'Gaurav Rajput',
-      addedBy: 'receptionist',
-      notes: 'Premium Annual Gold Membership enrollment',
-      timestamp: new Date(getPastDateStr(4) + 'T10:00:00Z').toISOString(),
-    },
-    {
-      id: 'tx-2',
-      amount: 850,
-      type: 'expense',
-      category: 'Rent',
-      date: getPastDateStr(4),
-      paymentMethod: 'Bank Transfer',
-      payee: 'Prime Heights Realty',
-      addedBy: 'admin',
-      notes: 'Monthly gym floor rent payment',
-      timestamp: new Date(getPastDateStr(4) + 'T12:30:00Z').toISOString(),
-    },
-    {
-      id: 'tx-3',
-      amount: 120,
-      type: 'income',
-      category: 'Personal Training',
-      date: getPastDateStr(3),
-      paymentMethod: 'UPI',
-      memberName: 'Rohan Sharma',
-      addedBy: 'receptionist',
-      notes: '3x personal training session package',
-      timestamp: new Date(getPastDateStr(3) + 'T14:15:00Z').toISOString(),
-    },
-    {
-      id: 'tx-4',
-      amount: 230,
-      type: 'expense',
-      category: 'Equipment Maintenance',
-      date: getPastDateStr(2),
-      paymentMethod: 'Card',
-      payee: 'Fitsmith Gym Servicing',
-      addedBy: 'admin',
-      notes: 'Treadmill deck replacement & cable lubrication',
-      timestamp: new Date(getPastDateStr(2) + 'T11:00:00Z').toISOString(),
-    },
-    {
-      id: 'tx-5',
-      amount: 75,
-      type: 'income',
-      category: 'Cafe/Merchandise',
-      date: getPastDateStr(1),
-      paymentMethod: 'Cash',
-      memberName: 'Nikhil Verma',
-      addedBy: 'receptionist',
-      notes: 'Whey Protein Tub (2lbs) & shaker bottle',
-      timestamp: new Date(getPastDateStr(1) + 'T18:00:00Z').toISOString(),
-    },
-    {
-      id: 'tx-6',
-      amount: 400,
-      type: 'expense',
-      category: 'Salaries',
-      date: getPastDateStr(1),
-      paymentMethod: 'Bank Transfer',
-      payee: 'Trainer Amit (PT commission)',
-      addedBy: 'owner',
-      notes: 'PT commission payouts for May',
-      timestamp: new Date(getPastDateStr(1) + 'T20:10:00Z').toISOString(),
-    },
-    {
-      id: 'tx-7',
-      amount: 10,
-      type: 'income',
-      category: 'Guest Pass',
-      date: getPastDateStr(0),
-      paymentMethod: 'Cash',
-      memberName: 'Walk-in Guest',
-      addedBy: 'receptionist',
-      notes: 'Daily trial pass',
-      timestamp: new Date().toISOString(),
-    },
-  ];
-};
-
-const getInitialAuditLogs = () => {
-  return [
-    { id: 'log-1', action: 'System Database seeded with defaults', role: 'admin' as UserRole, timestamp: '2026-06-13 10:00' },
-    { id: 'log-2', action: 'Created membership revenue of $1500', role: 'receptionist' as UserRole, timestamp: '2026-06-13 10:30' },
-    { id: 'log-3', action: 'Approved monthly lease rent payment of $850', role: 'admin' as UserRole, timestamp: '2026-06-13 12:35' },
-  ];
-};
 
 function App() {
   // Main state hooks
@@ -124,55 +15,74 @@ function App() {
     return (saved as UserRole) || 'owner';
   });
 
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('gym_finance_transactions');
-    return saved ? JSON.parse(saved) : getInitialTransactions();
-  });
-
-  const [categories, setCategories] = useState<{ income: string[]; expense: string[] }>(() => {
-    const saved = localStorage.getItem('gym_finance_categories');
-    return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES;
-  });
-
-  const [auditLogs, setAuditLogs] = useState<{ id: string; action: string; role: UserRole; timestamp: string }[]>(() => {
-    const saved = localStorage.getItem('gym_finance_audit_logs');
-    return saved ? JSON.parse(saved) : getInitialAuditLogs();
-  });
-
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<{ income: string[]; expense: string[] }>({ income: [], expense: [] });
+  const [auditLogs, setAuditLogs] = useState<{ id: string; action: string; role: UserRole; timestamp: string }[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
-  // Sync to local storage
+  // Sync role to local storage
   useEffect(() => {
     localStorage.setItem('gym_finance_role', role);
   }, [role]);
 
+  // Load database values on component mount
   useEffect(() => {
-    localStorage.setItem('gym_finance_transactions', JSON.stringify(transactions));
-  }, [transactions]);
+    const fetchInitialData = async () => {
+      try {
+        setIsLoading(true);
+        const [txRes, catRes, logRes] = await Promise.all([
+          fetch('/api/transactions'),
+          fetch('/api/categories'),
+          fetch('/api/audit-logs'),
+        ]);
 
-  useEffect(() => {
-    localStorage.setItem('gym_finance_categories', JSON.stringify(categories));
-  }, [categories]);
+        if (txRes.ok && catRes.ok && logRes.ok) {
+          const txData = await txRes.json();
+          const catData = await catRes.json();
+          const logData = await logRes.json();
 
-  useEffect(() => {
-    localStorage.setItem('gym_finance_audit_logs', JSON.stringify(auditLogs));
-  }, [auditLogs]);
+          setTransactions(txData);
+          setCategories(catData);
+          setAuditLogs(logData);
+        }
+      } catch (error) {
+        console.error('Error fetching initial data from backend:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInitialData();
+  }, []);
 
   // Logging function
-  const addAuditLog = (action: string, actingRole: UserRole) => {
+  const addAuditLog = async (action: string, actingRole: UserRole) => {
     const now = new Date();
     const timeStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const newLog = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: 'log-' + Math.random().toString(36).substr(2, 9),
       action,
       role: actingRole,
       timestamp: timeStr,
     };
-    setAuditLogs((prev) => [newLog, ...prev]);
+
+    try {
+      const response = await fetch('/api/audit-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newLog),
+      });
+      if (response.ok) {
+        setAuditLogs((prev) => [newLog, ...prev]);
+      }
+    } catch (err) {
+      console.error('Failed to create audit log:', err);
+    }
   };
 
   // Handlers
-  const handleAddTransaction = (data: {
+  const handleAddTransaction = async (data: {
     amount: number;
     type: 'income' | 'expense';
     category: string;
@@ -189,16 +99,27 @@ function App() {
       timestamp: new Date().toISOString(),
     };
 
-    setTransactions((prev) => [newTx, ...prev]);
-    
-    const participant = data.type === 'income' ? data.memberName : data.payee;
-    addAuditLog(
-      `Added ${data.type} of $${data.amount.toFixed(2)} (${data.category}) - ${participant}`,
-      role
-    );
+    try {
+      const response = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTx),
+      });
+      if (response.ok) {
+        const savedTx = await response.json();
+        setTransactions((prev) => [savedTx, ...prev]);
+        const participant = data.type === 'income' ? data.memberName : data.payee;
+        await addAuditLog(
+          `Added ${data.type} of $${data.amount.toFixed(2)} (${data.category}) - ${participant}`,
+          role
+        );
+      }
+    } catch (err) {
+      console.error('Failed to add transaction:', err);
+    }
   };
 
-  const handleEditSubmit = (data: {
+  const handleEditSubmit = async (data: {
     amount: number;
     type: 'income' | 'expense';
     category: string;
@@ -210,52 +131,90 @@ function App() {
   }) => {
     if (!editingTransaction) return;
 
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === editingTransaction.id ? { ...t, ...data } : t))
-    );
-
-    const participant = data.type === 'income' ? data.memberName : data.payee;
-    addAuditLog(
-      `Edited transaction ${editingTransaction.id}: $${data.amount.toFixed(2)} (${data.category}) - ${participant}`,
-      role
-    );
-    setEditingTransaction(null);
+    try {
+      const response = await fetch(`/api/transactions/${editingTransaction.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (response.ok) {
+        const updatedTx = await response.json();
+        setTransactions((prev) =>
+          prev.map((t) => (t.id === editingTransaction.id ? updatedTx : t))
+        );
+        const participant = data.type === 'income' ? data.memberName : data.payee;
+        await addAuditLog(
+          `Edited transaction ${editingTransaction.id}: $${data.amount.toFixed(2)} (${data.category}) - ${participant}`,
+          role
+        );
+        setEditingTransaction(null);
+      }
+    } catch (err) {
+      console.error('Failed to update transaction:', err);
+    }
   };
 
-  const handleDeleteTransaction = (id: string) => {
+  const handleDeleteTransaction = async (id: string) => {
     const target = transactions.find((t) => t.id === id);
     if (!target) return;
 
     if (window.confirm(`Are you sure you want to delete this $${target.amount.toFixed(2)} transaction?`)) {
-      setTransactions((prev) => prev.filter((t) => t.id !== id));
-      addAuditLog(`Deleted transaction ${id}: $${target.amount.toFixed(2)} (${target.category})`, role);
-      
-      // If we are currently editing the deleted item, cancel it
-      if (editingTransaction?.id === id) {
-        setEditingTransaction(null);
+      try {
+        const response = await fetch(`/api/transactions/${id}`, {
+          method: 'DELETE',
+        });
+        if (response.ok) {
+          setTransactions((prev) => prev.filter((t) => t.id !== id));
+          await addAuditLog(`Deleted transaction ${id}: $${target.amount.toFixed(2)} (${target.category})`, role);
+          if (editingTransaction?.id === id) {
+            setEditingTransaction(null);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to delete transaction:', err);
       }
     }
   };
 
   // Category additions
-  const handleAddCategory = (type: 'income' | 'expense', catName: string) => {
+  const handleAddCategory = async (type: 'income' | 'expense', catName: string) => {
     if (categories[type].includes(catName)) {
       alert('Category already exists!');
       return;
     }
-    setCategories((prev) => ({
-      ...prev,
-      [type]: [...prev[type], catName],
-    }));
-    addAuditLog(`Added new ${type} category: "${catName}"`, role);
+    try {
+      const response = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: catName, type }),
+      });
+      if (response.ok) {
+        setCategories((prev) => ({
+          ...prev,
+          [type]: [...prev[type], catName],
+        }));
+        await addAuditLog(`Added new ${type} category: "${catName}"`, role);
+      }
+    } catch (err) {
+      console.error('Failed to add category:', err);
+    }
   };
 
-  const handleRemoveCategory = (type: 'income' | 'expense', catName: string) => {
-    setCategories((prev) => ({
-      ...prev,
-      [type]: prev[type].filter((c) => c !== catName),
-    }));
-    addAuditLog(`Removed ${type} category: "${catName}"`, role);
+  const handleRemoveCategory = async (type: 'income' | 'expense', catName: string) => {
+    try {
+      const response = await fetch(`/api/categories/${type}/${catName}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        setCategories((prev) => ({
+          ...prev,
+          [type]: prev[type].filter((c) => c !== catName),
+        }));
+        await addAuditLog(`Removed ${type} category: "${catName}"`, role);
+      }
+    } catch (err) {
+      console.error('Failed to delete category:', err);
+    }
   };
 
   // Preset Add (receptionist quick tools)
@@ -273,6 +232,15 @@ function App() {
       paymentMethod: preset.type === 'income' ? 'UPI' : 'Cash',
     });
   };
+
+  if (isLoading) {
+    return (
+      <div className="loading-container">
+        <div className="spinner"></div>
+        <p style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Loading IronPulse Database...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">

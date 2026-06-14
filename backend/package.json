@@ -1,0 +1,16 @@
+{
+  "name": "finance-tracker-backend",
+  "version": "1.0.0",
+  "description": "Express + SQLite backend for Gym Finance Tracker",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
+  }
+}
